@@ -1,0 +1,1 @@
+export default function handler(req,res){res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Cache-Control','no-store');res.status(200).json({ok:true,service:'LageInfo API',firmsConfigured:!!process.env.FIRMS_MAP_KEY,time:new Date().toISOString()});}
