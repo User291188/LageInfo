@@ -1,4 +1,4 @@
-import json,math,os,urllib.request
+import json,math,os,urllib.request,brotli
 from shapely.geometry import Polygon,MultiPolygon,mapping,shape
 from shapely.ops import transform
 
@@ -11,7 +11,7 @@ DRIVE={
  'gemeinden':('1eyB8srsoHeOtQuQRaaHhupqFoSXkMjzq','geojson'),
  'stadtteile':('1UvAoi92PUEhKUlWI2Y-F7-GCURevHqe1','geojson')
 }
-PLZ_URL='https://raw.githubusercontent.com/yetzt/postleitzahlen/main/data/postleitzahlen.geojson'
+PLZ_RELEASE_API='https://api.github.com/repos/yetzt/postleitzahlen/releases/latest'
 SIMPLIFY={'bundeslaender':.0010,'kreise':.00065,'gemeinden':.00035,'stadtteile':.00018,'postleitzahlen':.00022,'liegenschaften':.00008,'stouebpl':.00008,'truebpl':.00008}
 
 def merc(x,y,z=None):
@@ -20,9 +20,16 @@ def merc(x,y,z=None):
 def download(fid):
  with urllib.request.urlopen(f'https://drive.usercontent.google.com/download?id={fid}&export=download&confirm=t',timeout=300) as r:return json.load(r)
 
-def download_url(url):
- req=urllib.request.Request(url,headers={'User-Agent':'LageInfo-GeoBuilder/1.0'})
- with urllib.request.urlopen(req,timeout=300) as r:return json.load(r)
+def request(url,accept='application/json'):
+ return urllib.request.Request(url,headers={'User-Agent':'LageInfo-GeoBuilder/1.1','Accept':accept})
+
+def download_latest_plz():
+ with urllib.request.urlopen(request(PLZ_RELEASE_API),timeout=60) as r:release=json.load(r)
+ asset=next((a for a in release.get('assets',[]) if a.get('name')=='postleitzahlen.geojson.br'),None)
+ if not asset:raise RuntimeError('Latest PLZ release has no postleitzahlen.geojson.br asset')
+ print('PLZ release',release.get('tag_name'),asset.get('size'))
+ with urllib.request.urlopen(request(asset['browser_download_url'],'application/octet-stream'),timeout=300) as r:raw=r.read()
+ return json.loads(brotli.decompress(raw).decode('utf-8'))
 
 def records(d,mode):
  if mode=='sites':return [f for l in d.get('layers',[]) for f in l.get('features',[])]
@@ -69,4 +76,4 @@ def write_geo(name,d,mode='geojson'):
 def build(name,fid,mode):write_geo(name,download(fid),mode)
 
 for name,(fid,mode) in DRIVE.items():build(name,fid,mode)
-write_geo('postleitzahlen',download_url(PLZ_URL),'geojson')
+write_geo('postleitzahlen',download_latest_plz(),'geojson')
