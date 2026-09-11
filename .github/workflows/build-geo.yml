@@ -27,7 +27,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - run: pip install shapely
+      - run: pip install shapely brotli
       - run: python scripts/build_geo.py
 
       - name: Commit generated layers
@@ -45,8 +45,6 @@ jobs:
 
           git commit -m "Generate local geo layers"
 
-          # main may have advanced while the conversion was running.
-          # Rebase the generated commit onto the latest remote main before pushing.
           git fetch origin main
           git rebase origin/main
           git push origin HEAD:main
