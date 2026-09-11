@@ -13,11 +13,16 @@ export default async function handler(req,res){
   }
   const id=IDS[key];
   if(!id)return res.status(400).json({error:'unknown layer',layer:key});
-  const urls=[`https://drive.usercontent.google.com/download?id=${encodeURIComponent(id)}&export=download&confirm=t`,`https://drive.google.com/uc?export=download&id=${encodeURIComponent(id)}`];
-  let last='';
-  for(const url of urls){
-   try{const r=await fetch(url,{redirect:'follow'});if(!r.ok){last=`Drive HTTP ${r.status}`;continue}const text=await r.text();const data=JSON.parse(text);return res.status(200).json(data)}catch(e){last=e.message}
-  }
-  throw new Error(last||'Drive source unavailable');
- }catch(e){console.error('geo',key,e);return res.status(502).json({error:'geo source unavailable',layer:key,detail:e.message})}
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),8000);
+  try{
+   const url=`https://drive.usercontent.google.com/download?id=${encodeURIComponent(id)}&export=download&confirm=t`;
+   const r=await fetch(url,{redirect:'follow',signal:controller.signal});
+   if(!r.ok)throw new Error(`Drive HTTP ${r.status}`);
+   const type=r.headers.get('content-type')||'';
+   if(type.includes('text/html'))throw new Error('Google Drive liefert statt JSON eine Download-Seite');
+   const text=await r.text();
+   return res.status(200).json(JSON.parse(text));
+  }finally{clearTimeout(timer)}
+ }catch(e){console.error('geo',key,e);const msg=e?.name==='AbortError'?'Quelldatei zu groß für Live-Abruf. Optimierte Kartendatei erforderlich.':e.message;return res.status(502).json({error:'geo source unavailable',layer:key,detail:msg})}
 }
