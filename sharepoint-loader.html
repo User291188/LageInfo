@@ -31,11 +31,32 @@
             });
     }
 
+    function fetchFirst(paths, allowHtml) {
+        var errors = [];
+        function next(i) {
+            if (i >= paths.length) {
+                throw new Error("Keine der Dateien gefunden: " + paths.join(", ") + (errors.length ? " | " + errors.join(" | ") : ""));
+            }
+            return fetchText(paths[i], allowHtml)
+                .then(function (text) { return { path: paths[i], text: text }; })
+                .catch(function (e) {
+                    errors.push(e.message || String(e));
+                    return next(i + 1);
+                });
+        }
+        return next(0);
+    }
+
     function cssUrls(css, base) {
         return css.replace(/url\(\s*(['"]?)(?!data:|https?:|\/\/|\/)([^'")]+)\1\s*\)/gi,
             function (_, q, rel) {
                 return 'url("' + base + rel + '")';
             });
+    }
+
+    function dirname(path) {
+        var i = path.lastIndexOf("/");
+        return i >= 0 ? path.substring(0, i + 1) : "";
     }
 
     function loadStyle(path, assetBase) {
@@ -49,18 +70,48 @@
         });
     }
 
+    function loadStyleFirst(paths, optional) {
+        return fetchFirst(paths, false).then(function (result) {
+            var style = document.createElement("style");
+            var base = APP + dirname(result.path);
+            style.type = "text/css";
+            style.setAttribute("data-lageinfo-style", result.path);
+            style.textContent = cssUrls(result.text, base);
+            document.head.appendChild(style);
+            console.log("LageInfo CSS OK:", result.path);
+            return result.path;
+        }).catch(function (e) {
+            if (optional) {
+                console.warn("LageInfo: optionale CSS-Datei nicht gefunden:", e.message || e);
+                return null;
+            }
+            throw e;
+        });
+    }
+
+    function executeCode(code, path, isolateAmd) {
+        var script = document.createElement("script");
+        script.type = "text/javascript";
+        script.setAttribute("data-lageinfo-script", path);
+        if (isolateAmd) {
+            script.text = "(function(define,module,exports){\n" + code + "\n}).call(window,undefined,undefined,undefined);\n//# sourceURL=" + abs(path);
+        } else {
+            script.text = code + "\n//# sourceURL=" + abs(path);
+        }
+        document.head.appendChild(script);
+        console.log("LageInfo JS OK:", path);
+    }
+
     function runScript(path, isolateAmd) {
         return fetchText(path, false).then(function (code) {
-            var script = document.createElement("script");
-            script.type = "text/javascript";
-            script.setAttribute("data-lageinfo-script", path);
-            if (isolateAmd) {
-                script.text = "(function(define,module,exports){\n" + code + "\n}).call(window,undefined,undefined,undefined);\n//# sourceURL=" + abs(path);
-            } else {
-                script.text = code + "\n//# sourceURL=" + abs(path);
-            }
-            document.head.appendChild(script);
-            console.log("LageInfo JS OK:", path);
+            executeCode(code, path, isolateAmd);
+        });
+    }
+
+    function runFirstScript(paths, isolateAmd) {
+        return fetchFirst(paths, false).then(function (result) {
+            executeCode(result.text, result.path, isolateAmd);
+            return result.path;
         });
     }
 
@@ -80,6 +131,24 @@
             '</div>';
     }
 
+    var LEAFLET_CSS = [
+        "vendor/leaflet/leaflet.css",
+        "vendor/leaflet/dist/leaflet.css",
+        "vendor/leaflet.css",
+        "leaflet/leaflet.css",
+        "dist/leaflet.css",
+        "leaflet.css"
+    ];
+
+    var LEAFLET_JS = [
+        "vendor/leaflet/leaflet.js",
+        "vendor/leaflet/dist/leaflet.js",
+        "vendor/leaflet.js",
+        "leaflet/leaflet.js",
+        "dist/leaflet.js",
+        "leaflet.js"
+    ];
+
     fetchText(INDEX, true)
         .then(function (html) {
             var page = new DOMParser().parseFromString(html, "text/html");
@@ -96,12 +165,12 @@
             document.documentElement.style.overflow = "hidden";
             document.body.style.overflow = "hidden";
 
-            return loadStyle("vendor/leaflet/leaflet.css", APP + "vendor/leaflet/")
+            return loadStyleFirst(LEAFLET_CSS, true)
                 .then(function () { return loadStyle("style.css", APP); });
         })
-        .then(function () { return runScript("vendor/leaflet/leaflet.js", true); })
-        .then(function () {
-            if (!window.L) throw new Error("Leaflet wurde ausgeführt, aber window.L fehlt");
+        .then(function () { return runFirstScript(LEAFLET_JS, true); })
+        .then(function (leafletPath) {
+            if (!window.L) throw new Error("Leaflet wurde aus " + leafletPath + " ausgeführt, aber window.L fehlt");
             console.log("LageInfo Leaflet OK:", window.L.version || "geladen");
             return runScript("config.js");
         })
