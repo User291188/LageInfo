@@ -1,0 +1,42 @@
+name: Package Gemeinden GeoJSON
+
+on:
+  push:
+    paths:
+      - '.github/workflows/package-gemeinden.yml'
+      - 'data/gemeinden.geojson'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Gemeinden GeoJSON
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s data/gemeinden.geojson
+          python - <<'PY'
+          import json, os
+          p='data/gemeinden.geojson'
+          with open(p,'r',encoding='utf-8') as f:
+              d=json.load(f)
+          n=len(d.get('features',[]))
+          if n == 0:
+              raise SystemExit('gemeinden.geojson contains no features')
+          print(f'Gemeinden: {n} features, {os.path.getsize(p)} bytes')
+          PY
+
+      - name: Upload Gemeinden artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemeinden-geojson
+          path: data/gemeinden.geojson
+          compression-level: 9
+          if-no-files-found: error
+          retention-days: 30
