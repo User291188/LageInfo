@@ -6,10 +6,10 @@ DRIVE={
  'liegenschaften':('1YPn34i03XYSEmuo_I1f3Dl8CX_FpqUXA','sites'),
  'stouebpl':('1nMJNDLZvRXY8ExXQRr-Id-mZ-IpCD3ZV','list'),
  'truebpl':('1haIB2rx8SeTPgAPP5ajAPI2n6CScGsJx','list'),
- 'bundeslaender':('1pqiPBuusg1b8SiFti29_5Fgz0VRyIdZx','geojson'),
- 'kreise':('1TWIZGBxzI_1sDEQ1okP_98aciSkE106I','geojson'),
- 'gemeinden':('1eyB8srsoHeOtQuQRaaHhupqFoSXkMjzq','geojson'),
- 'stadtteile':('1UvAoi92PUEhKUlWI2Y-F7-GCURevHqe1','geojson')
+ 'bundeslaender':('1pqiPBuusg1b8SiFti29_5Fgz0VRyIdZx','list'),
+ 'kreise':('1TWIZGBxzI_1sDEQ1okP_98aciSkE106I','list'),
+ 'gemeinden':('1eyB8srsoHeOtQuQRaaHhupqFoSXkMjzq','list'),
+ 'stadtteile':('1UvAoi92PUEhKUlWI2Y-F7-GCURevHqe1','list')
 }
 PLZ_RELEASE_API='https://api.github.com/repos/yetzt/postleitzahlen/releases/latest'
 SIMPLIFY={'bundeslaender':.0010,'kreise':.00065,'gemeinden':.00035,'stadtteile':.00018,'postleitzahlen':.00022,'liegenschaften':.00008,'stouebpl':.00008,'truebpl':.00008}
