@@ -108,6 +108,13 @@
         });
     }
 
+    function runOptionalScript(path, isolateAmd) {
+        return runScript(path, isolateAmd).catch(function (e) {
+            console.warn("LageInfo: optionales Modul nicht geladen:", path, e.message || e);
+            return null;
+        });
+    }
+
     function runFirstScript(paths, isolateAmd) {
         return fetchFirst(paths, false).then(function (result) {
             executeCode(result.text, result.path, isolateAmd);
@@ -177,7 +184,7 @@
         .then(function () { return runScript("modules/live-data.js"); })
         .then(function () { return runScript("modules/security-engine.js"); })
         .then(function () { return runScript("modules/geo-layers.js"); })
-        .then(function () { return runScript("modules/sharepoint-incidents.js"); })
+        .then(function () { return runOptionalScript("modules/sharepoint-incidents.js"); })
         .then(function () { return runScript("app.js"); })
         .then(function () {
             if (window.LageIncidents && window.LageIncidents.init) window.LageIncidents.init();
