@@ -15,7 +15,7 @@
         return APP + path;
     }
 
-    function fetchText(path) {
+    function fetchText(path, allowHtml) {
         var target = abs(path);
         var bust = target + (target.indexOf("?") >= 0 ? "&" : "?") + "lageinfo=" + Date.now();
         return fetch(bust, { credentials: "same-origin", cache: "no-store" })
@@ -24,7 +24,7 @@
                 return r.text();
             })
             .then(function (text) {
-                if (/^\s*(?:<!doctype\s+html|<html\b)/i.test(text)) {
+                if (!allowHtml && /^\s*(?:<!doctype\s+html|<html\b)/i.test(text)) {
                     throw new Error(path + " liefert HTML statt der erwarteten Datei");
                 }
                 return text;
@@ -39,7 +39,7 @@
     }
 
     function loadStyle(path, assetBase) {
-        return fetchText(path).then(function (css) {
+        return fetchText(path, false).then(function (css) {
             var style = document.createElement("style");
             style.type = "text/css";
             style.setAttribute("data-lageinfo-style", path);
@@ -50,7 +50,7 @@
     }
 
     function runScript(path, isolateAmd) {
-        return fetchText(path).then(function (code) {
+        return fetchText(path, false).then(function (code) {
             var script = document.createElement("script");
             script.type = "text/javascript";
             script.setAttribute("data-lageinfo-script", path);
@@ -80,7 +80,7 @@
             '</div>';
     }
 
-    fetchText(INDEX)
+    fetchText(INDEX, true)
         .then(function (html) {
             var page = new DOMParser().parseFromString(html, "text/html");
             Array.prototype.forEach.call(page.querySelectorAll("script,link[rel=stylesheet]"), function (n) { n.remove(); });
