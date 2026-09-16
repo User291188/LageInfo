@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - '.github/workflows/build-liegenschaften.yml'
+      - 'data/Liegenschaften.json'
 
 permissions:
   contents: read
@@ -22,23 +23,25 @@ jobs:
       - name: Install dependencies
         run: pip install shapely
 
-      - name: Download and convert Liegenschaften
+      - name: Convert repository Liegenschaften.json
         shell: bash
         run: |
           python - <<'PY'
-          import json, math, os, urllib.request
+          import json, math, os
           from shapely.geometry import Polygon, MultiPolygon, mapping
           from shapely.ops import transform
 
-          FILE_ID='1YPn34i03XYSEmuo_I1f3Dl8CX_FpqUXA'
-          URL=f'https://drive.usercontent.google.com/download?id={FILE_ID}&export=download&confirm=t'
+          source='data/Liegenschaften.json'
+          if not os.path.exists(source):
+              raise SystemExit(f'Missing source file: {source}')
 
-          req=urllib.request.Request(URL,headers={'User-Agent':'Mozilla/5.0'})
-          with urllib.request.urlopen(req,timeout=300) as r:
-              data=json.load(r)
+          with open(source,'r',encoding='utf-8-sig') as f:
+              data=json.load(f)
 
           records=[f for layer in data.get('layers',[]) for f in layer.get('features',[])]
           print('Source records:',len(records))
+          if not records:
+              raise SystemExit('Liegenschaften.json contains no ArcGIS features')
 
           def merc(x,y,z=None):
               lon=x*180/20037508.34
@@ -55,14 +58,19 @@ jobs:
               for ring in rings:
                   try:
                       p=Polygon(ring)
-                      if not p.is_valid: p=p.buffer(0)
-                      if p.is_empty: continue
+                      if not p.is_valid:
+                          p=p.buffer(0)
+                      if p.is_empty:
+                          continue
                       p=transform(merc,p).simplify(.00005,preserve_topology=True)
-                      if p.geom_type=='Polygon': polys.append(p)
-                      elif p.geom_type=='MultiPolygon': polys.extend(list(p.geoms))
-                  except Exception as e:
+                      if p.geom_type=='Polygon':
+                          polys.append(p)
+                      elif p.geom_type=='MultiPolygon':
+                          polys.extend(list(p.geoms))
+                  except Exception:
                       pass
-              if not polys: continue
+              if not polys:
+                  continue
               geom=polys[0] if len(polys)==1 else MultiPolygon(polys)
               attrs=rec.get('attributes') or {}
               props={k:v for k,v in attrs.items() if k in keep and v is not None}
