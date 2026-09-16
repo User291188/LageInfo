@@ -1,0 +1,91 @@
+name: Build Liegenschaften GeoJSON
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-liegenschaften.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install shapely
+
+      - name: Download and convert Liegenschaften
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, math, os, urllib.request
+          from shapely.geometry import Polygon, MultiPolygon, mapping
+          from shapely.ops import transform
+
+          FILE_ID='1YPn34i03XYSEmuo_I1f3Dl8CX_FpqUXA'
+          URL=f'https://drive.usercontent.google.com/download?id={FILE_ID}&export=download&confirm=t'
+
+          req=urllib.request.Request(URL,headers={'User-Agent':'Mozilla/5.0'})
+          with urllib.request.urlopen(req,timeout=300) as r:
+              data=json.load(r)
+
+          records=[f for layer in data.get('layers',[]) for f in layer.get('features',[])]
+          print('Source records:',len(records))
+
+          def merc(x,y,z=None):
+              lon=x*180/20037508.34
+              lat=y*180/20037508.34
+              lat=180/math.pi*(2*math.atan(math.exp(lat*math.pi/180))-math.pi/2)
+              return lon,lat
+
+          keep={'objectid','OBJECTID','we_nr','lgbez','typ','hbt','plz','ort','strasse','nr','bl','flaeche_qm','anzahl_gebaeude'}
+          features=[]
+
+          for rec in records:
+              rings=(rec.get('geometry') or {}).get('rings') or []
+              polys=[]
+              for ring in rings:
+                  try:
+                      p=Polygon(ring)
+                      if not p.is_valid: p=p.buffer(0)
+                      if p.is_empty: continue
+                      p=transform(merc,p).simplify(.00005,preserve_topology=True)
+                      if p.geom_type=='Polygon': polys.append(p)
+                      elif p.geom_type=='MultiPolygon': polys.extend(list(p.geoms))
+                  except Exception as e:
+                      pass
+              if not polys: continue
+              geom=polys[0] if len(polys)==1 else MultiPolygon(polys)
+              attrs=rec.get('attributes') or {}
+              props={k:v for k,v in attrs.items() if k in keep and v is not None}
+              features.append({'type':'Feature','properties':props,'geometry':mapping(geom)})
+
+          if not features:
+              raise SystemExit('No Liegenschaften geometries generated')
+
+          out={'type':'FeatureCollection','features':features}
+          os.makedirs('artifact',exist_ok=True)
+          path='artifact/liegenschaften.geojson'
+          with open(path,'w',encoding='utf-8') as f:
+              json.dump(out,f,ensure_ascii=False,separators=(',',':'))
+
+          print('Generated features:',len(features))
+          print('Output bytes:',os.path.getsize(path))
+          PY
+
+      - name: Upload Liegenschaften artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: liegenschaften-geojson
+          path: artifact/liegenschaften.geojson
+          compression-level: 9
+          if-no-files-found: error
+          retention-days: 30
