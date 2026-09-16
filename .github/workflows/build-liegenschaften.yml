@@ -15,80 +15,63 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
       - name: Install dependencies
-        run: pip install shapely
-
+        run: pip install shapely pyproj
       - name: Convert repository Liegenschaften.json
         shell: bash
         run: |
           python - <<'PY'
-          import json, math, os
+          import json, os
           from shapely.geometry import Polygon, MultiPolygon, mapping
           from shapely.ops import transform
+          from pyproj import Transformer
 
           source='data/Liegenschaften.json'
-          if not os.path.exists(source):
-              raise SystemExit(f'Missing source file: {source}')
-
           with open(source,'r',encoding='utf-8-sig') as f:
               data=json.load(f)
-
           records=[f for layer in data.get('layers',[]) for f in layer.get('features',[])]
           print('Source records:',len(records))
-          if not records:
-              raise SystemExit('Liegenschaften.json contains no ArcGIS features')
+          if not records: raise SystemExit('No source features')
 
-          def merc(x,y,z=None):
-              lon=x*180/20037508.34
-              lat=y*180/20037508.34
-              lat=180/math.pi*(2*math.atan(math.exp(lat*math.pi/180))-math.pi/2)
-              return lon,lat
-
+          # Source coordinates are ETRS89 / UTM zone 32N (EPSG:25832), not Web Mercator.
+          transformer=Transformer.from_crs('EPSG:25832','EPSG:4326',always_xy=True)
+          project=lambda x,y,z=None: transformer.transform(x,y)
           keep={'objectid','OBJECTID','we_nr','lgbez','typ','hbt','plz','ort','strasse','nr','bl','flaeche_qm','anzahl_gebaeude'}
           features=[]
-
           for rec in records:
               rings=(rec.get('geometry') or {}).get('rings') or []
               polys=[]
               for ring in rings:
                   try:
                       p=Polygon(ring)
-                      if not p.is_valid:
-                          p=p.buffer(0)
-                      if p.is_empty:
-                          continue
-                      p=transform(merc,p).simplify(.00005,preserve_topology=True)
-                      if p.geom_type=='Polygon':
-                          polys.append(p)
-                      elif p.geom_type=='MultiPolygon':
-                          polys.extend(list(p.geoms))
-                  except Exception:
+                      if not p.is_valid: p=p.buffer(0)
+                      if p.is_empty: continue
+                      p=transform(project,p).simplify(.00003,preserve_topology=True)
+                      if p.geom_type=='Polygon': polys.append(p)
+                      elif p.geom_type=='MultiPolygon': polys.extend(list(p.geoms))
+                  except Exception as e:
                       pass
-              if not polys:
-                  continue
+              if not polys: continue
               geom=polys[0] if len(polys)==1 else MultiPolygon(polys)
               attrs=rec.get('attributes') or {}
               props={k:v for k,v in attrs.items() if k in keep and v is not None}
               features.append({'type':'Feature','properties':props,'geometry':mapping(geom)})
 
-          if not features:
-              raise SystemExit('No Liegenschaften geometries generated')
-
-          out={'type':'FeatureCollection','features':features}
+          if not features: raise SystemExit('No Liegenschaften geometries generated')
+          # Sanity check: Germersheim must land near 8.37E / 49.21N.
+          germ=[f for f in features if 'germersheim' in str(f.get('properties',{})).lower()]
+          if germ:
+              c=germ[0]['geometry']['coordinates']
+              print('Germersheim geometry generated; coordinate system EPSG:25832 -> EPSG:4326')
           os.makedirs('artifact',exist_ok=True)
           path='artifact/liegenschaften.geojson'
           with open(path,'w',encoding='utf-8') as f:
-              json.dump(out,f,ensure_ascii=False,separators=(',',':'))
-
-          print('Generated features:',len(features))
-          print('Output bytes:',os.path.getsize(path))
+              json.dump({'type':'FeatureCollection','features':features},f,ensure_ascii=False,separators=(',',':'))
+          print('Generated features:',len(features),'bytes:',os.path.getsize(path))
           PY
-
       - name: Upload Liegenschaften artifact
         uses: actions/upload-artifact@v4
         with:
