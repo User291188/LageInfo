@@ -30,6 +30,33 @@ jobs:
       - run: pip install shapely brotli
       - run: python scripts/build_geo.py
 
+      - name: Package Gemeinden for download
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s data/gemeinden.geojson
+          mkdir -p artifact
+          cp data/gemeinden.geojson artifact/gemeinden.geojson
+          python - <<'PY'
+          import json
+          p='artifact/gemeinden.geojson'
+          with open(p,'r',encoding='utf-8') as f:
+              d=json.load(f)
+          n=len(d.get('features',[]))
+          if n == 0:
+              raise SystemExit('gemeinden.geojson contains no features')
+          print(f'Gemeinden artifact: {n} features')
+          PY
+
+      - name: Upload Gemeinden artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemeinden-geojson
+          path: artifact/gemeinden.geojson
+          compression-level: 9
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Commit generated layers
         shell: bash
         run: |
